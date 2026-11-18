@@ -9,7 +9,10 @@ const MODEL_URL =
 const $ = (id) => document.getElementById(id);
 
 // ---------- Réglages persistants ----------
-const DEFAULTS = { time: "07:00", duration: 30, mode: "camera", armed: false, lastFired: "" };
+const DEFAULTS = {
+  time: "07:00", duration: 30, mode: "camera", sound: "classique", customName: "",
+  armed: false, lastFired: "",
+};
 let settings = { ...DEFAULTS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("danse-reveil") || "{}")); } catch {}
 const save = () => { try { localStorage.setItem("danse-reveil", JSON.stringify(settings)); } catch {} };
@@ -48,7 +51,8 @@ setupSegmented("difficulty", "duration");
 setupSegmented("mode", "mode", renderModeHint);
 renderModeHint();
 
-// ---------- Son de l'alarme (Web Audio, aucun fichier requis) ----------
+// ---------- Son de l'alarme ----------
+// Sonneries intégrées (générées en Web Audio) + musique perso stockée dans IndexedDB.
 let audioCtx = null;
 let alarmNodes = null;
 
@@ -63,38 +67,153 @@ function unlockAudio() {
   src.start(0);
 }
 
-function startAlarmSound() {
+// Joue une note courte. type = forme d'onde, dur = durée en secondes.
+function tone(out, freq, { type = "square", dur = 0.18, vol = 0.5, at = 0, slideTo = null } = {}) {
+  const t = audioCtx.currentTime + at;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (slideTo) osc.frequency.linearRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  g.gain.setValueAtTime(vol, t + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  osc.connect(g).connect(out);
+  osc.start(t);
+  osc.stop(t + dur + 0.02);
+}
+
+// Chaque sonnerie : un intervalle (ms) et une fonction appelée à chaque tour.
+const SOUNDS = {
+  classique: {
+    label: "🔔 Classique",
+    every: 220,
+    play: (out, i) => tone(out, [880, 1175, 1480, 1175][i % 4]),
+  },
+  bipbip: {
+    label: "⌚ Bip-bip",
+    every: 1000,
+    play: (out) => {
+      for (let k = 0; k < 4; k++) tone(out, 2000, { type: "square", dur: 0.07, at: k * 0.12, vol: 0.45 });
+    },
+  },
+  sirene: {
+    label: "🚨 Sirène",
+    every: 1200,
+    play: (out) => {
+      tone(out, 600, { type: "sawtooth", dur: 0.6, slideTo: 1400, vol: 0.35 });
+      tone(out, 1400, { type: "sawtooth", dur: 0.6, slideTo: 600, vol: 0.35, at: 0.6 });
+    },
+  },
+  disco: {
+    label: "🪩 Disco",
+    every: 150,
+    play: (out, i) => {
+      const bar = Math.floor(i / 8) % 4;
+      const root = [261.6, 220, 174.6, 196][bar];
+      const arp = [1, 1.25, 1.5, 2, 1.5, 1.25, 2, 2.5];
+      tone(out, root * arp[i % 8], { type: "triangle", dur: 0.14, vol: 0.55 });
+      if (i % 2 === 0) tone(out, 60, { type: "sine", dur: 0.12, slideTo: 40, vol: 0.9 }); // grosse caisse
+    },
+  },
+  coq: {
+    label: "🐓 Cocorico",
+    every: 2600,
+    play: (out) => {
+      const notes = [[520, 700, 0.15], [700, 660, 0.15], [660, 900, 0.25], [900, 600, 0.6]];
+      let at = 0;
+      for (const [a, b, d] of notes) {
+        tone(out, a, { type: "sawtooth", dur: d, slideTo: b, vol: 0.35, at });
+        at += d + 0.03;
+      }
+    },
+  },
+};
+
+// --- Musique perso (IndexedDB, car trop lourde pour localStorage) ---
+function idb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("danse-reveil", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("files");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, value) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("files", "readwrite");
+    tx.objectStore("files").put(value, key);
+    tx.oncomplete = res;
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const req = db.transaction("files").objectStore("files").get(key);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+let customBuffer = null; // AudioBuffer décodé, prêt à jouer
+async function loadCustomBuffer() {
+  if (customBuffer) return customBuffer;
+  const blob = await idbGet("custom");
+  if (!blob) return null;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const data = await blob.arrayBuffer();
+  customBuffer = await new Promise((res, rej) => audioCtx.decodeAudioData(data, res, rej));
+  return customBuffer;
+}
+
+async function startAlarmSound({ preview = false } = {}) {
   unlockAudio();
   stopAlarmSound();
   const master = audioCtx.createGain();
-  master.gain.value = 0.15;
   master.connect(audioCtx.destination);
-  // Le volume monte progressivement jusqu'au maximum en 20 s.
-  master.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 20);
+  if (preview) {
+    master.gain.value = 0.6;
+  } else {
+    // Le volume monte progressivement jusqu'au maximum en 20 s.
+    master.gain.value = 0.15;
+    master.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 20);
+  }
+  const nodes = { master, preview };
+  alarmNodes = nodes;
 
-  const notes = [880, 1175, 1480, 1175]; // petite mélodie stridente
-  let step = 0;
-  const beep = () => {
-    const t = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    osc.type = "square";
-    osc.frequency.value = notes[step++ % notes.length];
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.5, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-    osc.connect(g).connect(master);
-    osc.start(t);
-    osc.stop(t + 0.2);
-  };
-  const timer = setInterval(beep, 220);
-  const vib = setInterval(() => navigator.vibrate && navigator.vibrate([400, 200, 400]), 1200);
-  alarmNodes = { master, timer, vib };
+  let sound = settings.sound;
+  if (sound === "custom") {
+    let buf = null;
+    try { buf = await loadCustomBuffer(); } catch {}
+    if (alarmNodes !== nodes) return; // arrêté entre-temps
+    if (buf) {
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(master);
+      src.start();
+      nodes.src = src;
+    } else {
+      sound = "classique"; // fichier introuvable : on sonne quand même !
+    }
+  }
+  if (!nodes.src) {
+    const s = SOUNDS[sound] || SOUNDS.classique;
+    let i = 0;
+    s.play(master, i++);
+    nodes.timer = setInterval(() => s.play(master, i++), s.every);
+  }
+  if (!preview) {
+    nodes.vib = setInterval(() => navigator.vibrate && navigator.vibrate([400, 200, 400]), 1200);
+  }
 }
 
 // Pendant la danse, on baisse le son quand tu bouges bien (récompense), sans jamais le couper.
 function setAlarmVolume(v) {
-  if (!alarmNodes || !audioCtx || alarmNodes.vol === v) return;
+  if (!alarmNodes || !audioCtx || alarmNodes.preview || alarmNodes.vol === v) return;
   alarmNodes.vol = v;
   const g = alarmNodes.master.gain;
   g.cancelScheduledValues(audioCtx.currentTime);
@@ -105,10 +224,75 @@ function stopAlarmSound() {
   if (!alarmNodes) return;
   clearInterval(alarmNodes.timer);
   clearInterval(alarmNodes.vib);
+  try { alarmNodes.src?.stop(); } catch {}
   alarmNodes.master.disconnect();
   navigator.vibrate && navigator.vibrate(0);
   alarmNodes = null;
+  clearTimeout(previewTimer);
+  renderPreviewBtn();
 }
+
+// --- Interface de choix de la sonnerie ---
+let previewTimer = null;
+function renderPreviewBtn() {
+  const playing = alarmNodes?.preview;
+  $("btn-preview").textContent = playing ? "⏹ Arrêter" : "▶️ Écouter";
+}
+
+function renderSoundList() {
+  const box = $("sound-list");
+  box.innerHTML = "";
+  const entries = Object.entries(SOUNDS).map(([k, s]) => [k, s.label]);
+  if (settings.customName) entries.push(["custom", `🎵 ${settings.customName}`]);
+  for (const [key, label] of entries) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = settings.sound === key ? "selected" : "";
+    b.addEventListener("click", () => {
+      settings.sound = key;
+      save();
+      renderSoundList();
+      startAlarmSound({ preview: true }).then(schedulePreviewStop);
+    });
+    box.appendChild(b);
+  }
+}
+
+function schedulePreviewStop() {
+  renderPreviewBtn();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => { if (alarmNodes?.preview) stopAlarmSound(); }, 5000);
+}
+
+$("btn-preview").addEventListener("click", () => {
+  if (alarmNodes?.preview) stopAlarmSound();
+  else startAlarmSound({ preview: true }).then(schedulePreviewStop);
+});
+
+$("sound-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const status = $("sound-status");
+  status.textContent = "Chargement…";
+  try {
+    unlockAudio();
+    // On vérifie que le fichier est bien lisible avant de l'enregistrer.
+    const data = await file.arrayBuffer();
+    customBuffer = await new Promise((res, rej) => audioCtx.decodeAudioData(data, res, rej));
+    await idbPut("custom", file);
+    settings.customName = file.name.replace(/\.[^.]+$/, "").slice(0, 30);
+    settings.sound = "custom";
+    save();
+    renderSoundList();
+    status.textContent = "";
+    startAlarmSound({ preview: true }).then(schedulePreviewStop);
+  } catch {
+    status.textContent = "⚠️ Ce fichier audio n'est pas lisible. Essaie un MP3.";
+  }
+});
+
+renderSoundList();
 
 // ---------- Garder l'écran allumé ----------
 let wakeLock = null;
@@ -163,6 +347,7 @@ function tick() {
 
 async function arm() {
   unlockAudio(); // nécessite un geste utilisateur
+  stopAlarmSound(); // coupe un éventuel aperçu
   if (settings.mode === "motion") await requestMotionPermission();
   settings.armed = true;
   settings.time = $("alarm-time").value || settings.time;

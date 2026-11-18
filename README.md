@@ -4,7 +4,8 @@ Une alarme du matin qui **ne s'arrête que si tu danses**.
 
 ## Fonctionnement
 
-1. Choisis l'heure du réveil, la durée de danse (15 s, 30 s ou 1 min) et le mode de détection.
+1. Choisis l'heure du réveil, la sonnerie (5 sons intégrés ou ta propre musique via
+   **➕ Choisir ma musique**, à écouter avec **▶️ Écouter**), la durée de danse (15 s, 30 s ou 1 min) et le mode de détection.
 2. Appuie sur **Activer l'alarme**, laisse la page ouverte et le téléphone branché (l'écran reste allumé).
 3. À l'heure dite, l'alarme sonne et vibre. Pour l'arrêter, il faut danser :
    - **📷 Caméra** : pose le téléphone face à toi. La détection de posture (MediaPipe) suit

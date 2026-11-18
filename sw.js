@@ -1,5 +1,5 @@
 // Service worker : met l'app en cache pour qu'elle s'ouvre même hors-ligne.
-const CACHE = "danse-reveil-v1";
+const CACHE = "danse-reveil-v2";
 const ASSETS = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icon.svg"];
 
 self.addEventListener("install", (e) => {

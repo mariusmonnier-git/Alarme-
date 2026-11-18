@@ -27,6 +27,19 @@
     </div>
 
     <div class="card">
+      <div class="card-head">
+        <span class="field-label">Sonnerie</span>
+        <button id="btn-preview" class="link-btn" type="button">▶️ Écouter</button>
+      </div>
+      <div class="sound-list" id="sound-list"></div>
+      <label class="file-btn">
+        <input id="sound-file" type="file" accept="audio/*">
+        ➕ Choisir ma musique
+      </label>
+      <p class="hint" id="sound-status"></p>
+    </div>
+
+    <div class="card">
       <span class="field-label">Durée de danse</span>
       <div class="segmented" id="difficulty">
         <button data-value="15">15 s</button>
