@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14102a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Danse Réveil</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Écran 1 : réglages -->
+  <section id="screen-setup" class="screen active">
+    <header class="brand">
+      <span class="logo">🕺</span>
+      <h1>Danse Réveil</h1>
+      <p class="tagline">L'alarme ne s'arrête que si tu danses.</p>
+    </header>
+
+    <div class="card">
+      <label class="field-label" for="alarm-time">Heure du réveil</label>
+      <input id="alarm-time" type="time" value="07:00" required>
+    </div>
+
+    <div class="card">
+      <span class="field-label">Durée de danse</span>
+      <div class="segmented" id="difficulty">
+        <button data-value="15">15 s</button>
+        <button data-value="30">30 s</button>
+        <button data-value="60">1 min</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="field-label">Détection</span>
+      <div class="segmented" id="mode">
+        <button data-value="camera">📷 Caméra</button>
+        <button data-value="motion">📱 Téléphone en main</button>
+      </div>
+      <p class="hint" id="mode-hint"></p>
+    </div>
+
+    <button id="btn-arm" class="btn primary">Activer l'alarme</button>
+    <button id="btn-test" class="btn ghost">Tester maintenant</button>
+
+    <p class="hint small">
+      Garde cette page ouverte et le téléphone branché : l'écran reste allumé
+      jusqu'au réveil.
+    </p>
+  </section>
+
+  <!-- Écran 2 : alarme armée -->
+  <section id="screen-armed" class="screen">
+    <div class="armed-wrap">
+      <p class="now" id="now-clock">--:--</p>
+      <p class="armed-label">Réveil à <strong id="armed-time">--:--</strong></p>
+      <p class="countdown" id="countdown"></p>
+      <p class="hint" id="wakelock-status"></p>
+    </div>
+    <button id="btn-disarm" class="btn ghost">Annuler l'alarme</button>
+  </section>
+
+  <!-- Écran 3 : ça sonne, il faut danser -->
+  <section id="screen-ring" class="screen">
+    <div class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="motion-visual" id="motion-visual">📱</div>
+    </div>
+    <div class="ring-ui">
+      <p class="ring-title" id="ring-title">DANSE !</p>
+      <p class="ring-msg" id="ring-msg">Chargement de la détection…</p>
+      <div class="meter"><div class="meter-fill" id="energy"></div></div>
+      <div class="progress"><div class="progress-fill" id="progress"></div></div>
+      <p class="progress-label" id="progress-label">0 / 30 s</p>
+      <button id="btn-switch-mode" class="btn ghost small-btn">Passer en mode téléphone en main</button>
+    </div>
+  </section>
+
+  <!-- Écran 4 : gagné -->
+  <section id="screen-done" class="screen">
+    <div class="done-wrap">
+      <p class="done-emoji">🌞</p>
+      <h2>Bien joué, t'es réveillé·e !</h2>
+      <p id="done-stats" class="hint"></p>
+      <button id="btn-back" class="btn primary">Retour</button>
+    </div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
