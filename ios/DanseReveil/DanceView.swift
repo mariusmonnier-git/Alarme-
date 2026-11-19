@@ -40,6 +40,13 @@ struct DanceView: View {
                 Spacer()
             }
 
+            // La musique de l'app suit le volume média : on prévient s'il est trop bas.
+            if AVAudioSession.sharedInstance().outputVolume < 0.2 {
+                Label("Monte le volume", systemImage: "speaker.wave.3.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.accent)
+            }
+
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(Int(ring.progress))")
                     .font(.system(size: 64, weight: .heavy, design: .rounded))

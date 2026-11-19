@@ -24,7 +24,8 @@ struct DanseReveilApp: App {
                     // Mode démo pour les captures : xcrun simctl launch … -demo dance
                     if let demo = Demo.screen {
                         settings.isArmed = Demo.armed
-                        settings.repeatDaily = true
+                        settings.weekdays = Demo.days ?? Set(1...7)
+                        settings.repeatWeekly = true
                         ring.showDemo(demo)
                         return
                     }
@@ -32,13 +33,14 @@ struct DanseReveilApp: App {
                     await AlarmScheduler.ensureScheduled(settings)
                     // Si l'alarme sonne pendant que l'app est ouverte, on passe direct à la danse.
                     for await alarms in AlarmManager.shared.alarmUpdates {
-                        guard alarms.contains(where: { $0.state == .alerting }),
-                              scenePhase == .active else { continue }
-                        if ring.phase == .ringing {
+                        guard alarms.contains(where: { $0.state == .alerting }) else { continue }
+                        AlarmState.markRinging()
+                        guard scenePhase == .active else { continue }
+                        if ring.phase == .ringing && !ring.canCancel {
                             AlarmScheduler.stopAlerting()
                             await AlarmScheduler.postponeChain(by: 180)
                         } else {
-                            ring.start()
+                            ring.resumeIfNeeded()
                         }
                     }
                 }
@@ -50,6 +52,15 @@ struct RootView: View {
     @EnvironmentObject var ring: RingController
 
     var body: some View {
+        content
+            // Sécurité : si l'accueil s'affiche alors qu'une danse est due, on repart sur la danse.
+            .onAppear { ring.resumeIfNeeded() }
+            .onChange(of: ring.phase) { _, phase in
+                if phase == .idle { ring.resumeIfNeeded() }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         switch ring.phase {
         case .idle where Demo.screen == "sounds":
             NavigationStack { SoundListView() }
@@ -64,6 +75,11 @@ struct RootView: View {
 enum Demo {
     static var screen: String? { UserDefaults.standard.string(forKey: "demo") }
     static var armed: Bool { UserDefaults.standard.bool(forKey: "demoArmed") }
+    /// Jours cochés pour la démo, ex. « 2,4,6 ».
+    static var days: Set<Int>? {
+        guard let raw = UserDefaults.standard.string(forKey: "demoDays") else { return nil }
+        return Set(raw.split(separator: ",").compactMap { Int($0) })
+    }
 }
 
 /// Style du logo : orange vif sur noir, formes rondes et épaisses.

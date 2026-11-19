@@ -45,7 +45,7 @@ jobs:
           mkdir -p screenshots
           shot() {
             xcrun simctl terminate "$UDID" com.dansereveil.app 2>/dev/null || true
-            xcrun simctl launch "$UDID" com.dansereveil.app -demo "$2" -demoArmed "$3"
+            xcrun simctl launch "$UDID" com.dansereveil.app -demo "$2" -demoArmed "$3" -demoDays "${4:-1,2,3,4,5,6,7}"
             sleep 6
             xcrun simctl io "$UDID" screenshot "screenshots/$1.png"
           }
@@ -54,6 +54,7 @@ jobs:
           shot 3-sonneries sounds NO
           shot 4-danse dance YES
           shot 5-fin done YES
+          shot 6-jours-choisis home YES 4
           ls -la screenshots
 
       - name: Enregistrer les captures dans le dépôt

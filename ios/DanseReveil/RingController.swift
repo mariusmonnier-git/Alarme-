@@ -35,9 +35,23 @@ final class RingController: ObservableObject {
         "Garde le rythme !", "Presque fini !",
     ]
 
-    /// À appeler quand l'app s'ouvre : reprend la danse si l'alarme a sonné.
+    /// À appeler dès que l'app s'ouvre : si une alarme a sonné (ou si « Danser » a été touché),
+    /// on va directement à l'écran de danse. Impossible d'y échapper avant d'avoir dansé.
     func resumeIfNeeded() {
-        if AlarmState.needsDance && phase != .ringing { start() }
+        guard Demo.screen == nil else { return }
+        let requested = AlarmState.danceRequestedAt.map { Date().timeIntervalSince($0) < 300 } ?? false
+        if requested || AlarmScheduler.isAlerting { AlarmState.markRinging() }
+        guard AlarmState.needsDance else { return }
+        if phase == .ringing {
+            // Un test était en cours : il devient la vraie danse (plus de bouton « Quitter »).
+            if isTest {
+                isTest = false
+                AlarmScheduler.stopAlerting()
+                Task { await AlarmScheduler.postponeChain(by: 180) }
+            }
+        } else {
+            start()
+        }
     }
 
     func start(test: Bool = false) {
@@ -56,6 +70,8 @@ final class RingController: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
 
         if !test {
+            AlarmState.markRinging()
+            AlarmState.danceRequestedAt = nil
             AlarmScheduler.stopAlerting()
             // Pendant la danse, les relances sont repoussées à 3 min (si tu quittes l'app, ça resonne).
             Task { await AlarmScheduler.postponeChain(by: 180) }
@@ -150,14 +166,17 @@ final class RingController: ObservableObject {
         let secs = Int(Date().timeIntervalSince(startedAt))
         doneText = "Alarme arrêtée en \(secs / 60) min \(String(format: "%02d", secs % 60)) s"
         if !isTest {
+            // Danse validée : on coupe tout, puis on programme la prochaine si l'alarme se répète.
             AlarmState.danceDoneAt = Date()
-            AlarmScheduler.cancelChain()
+            AlarmState.danceRequestedAt = nil
             AlarmScheduler.stopAlerting()
+            AlarmScheduler.disarm()
             let settings = AppSettings.shared
-            if settings.repeatDaily {
-                Task { try? await AlarmScheduler.arm(settings) }  // alarme de demain
+            if settings.isArmed && settings.repeats {
+                Task {
+                    do { try await AlarmScheduler.arm(settings) } catch { settings.isArmed = false }
+                }
             } else {
-                AlarmScheduler.disarm()
                 settings.isArmed = false
             }
         }
