@@ -14,6 +14,7 @@ struct DanseReveilApp: App {
                 .environmentObject(ring)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
+                .fontDesign(.rounded)
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     ring.resumeIfNeeded()
@@ -50,8 +51,26 @@ struct RootView: View {
     }
 }
 
-/// Style sobre façon app Horloge : noir, gris système, un seul accent orange.
+/// Style du logo : orange vif sur noir, formes rondes et épaisses.
 enum Theme {
-    static let accent = Color(red: 1, green: 0.624, blue: 0.039)  // orange système #FF9F0A
-    static let ok = Color(red: 0.188, green: 0.82, blue: 0.345)  // vert système #30D158
+    static let accent = Color(red: 254 / 255, green: 123 / 255, blue: 2 / 255)  // #FE7B02, l'orange du logo
+    static let ok = accent
+    static let row = Color(white: 0.09)  // fond des lignes
+    static let ink = Color.black  // texte sur fond orange
+}
+
+/// Gros bouton orange arrondi, dans l'esprit du logo.
+struct PillButtonStyle: ButtonStyle {
+    var filled = true
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.title3, design: .rounded, weight: .heavy))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(filled ? Theme.ink : Theme.accent)
+            .background(filled ? Theme.accent : Color.clear, in: Capsule())
+            .overlay(Capsule().stroke(Theme.accent, lineWidth: filled ? 0 : 3))
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+    }
 }

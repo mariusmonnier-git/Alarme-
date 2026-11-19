@@ -14,10 +14,12 @@ struct DanceView: View {
                 CameraPreview(session: ring.camera.session)
                     .ignoresSafeArea()
             } else {
-                Image(systemName: "figure.dance")
-                    .font(.system(size: 150, weight: .ultraLight))
-                    .foregroundStyle(.white)
+                Image("Logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 220)
                     .rotationEffect(.degrees(sin(Date().timeIntervalSince1970 * 8) * ring.energy * 20))
+                    .scaleEffect(1 + ring.energy * 0.15)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
@@ -29,32 +31,43 @@ struct DanceView: View {
     private var panel: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(dancing ? Theme.ok : Color.white.opacity(0.35))
-                    .frame(width: 10, height: 10)
+                Image(systemName: "figure.dance")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(dancing ? Theme.accent : Color.white.opacity(0.35))
+                    .symbolEffect(.bounce, value: dancing)
                 Text(ring.message)
-                    .font(.headline)
+                    .font(.system(.title3, design: .rounded, weight: .heavy))
                 Spacer()
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(Int(ring.progress))")
-                    .font(.system(size: 64, weight: .thin))
+                    .font(.system(size: 64, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Theme.accent)
                     .monospacedDigit()
                 Text("/ \(ring.target) s")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
 
-            ProgressView(value: min(1, ring.progress / Double(ring.target)))
-                .tint(Theme.accent)
+            // Progression : grosse barre arrondie orange.
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.12))
+                    Capsule()
+                        .fill(Theme.accent)
+                        .frame(width: max(14, geo.size.width * min(1, ring.progress / Double(ring.target))))
+                        .animation(.linear(duration: 0.2), value: ring.progress)
+                }
+            }
+            .frame(height: 14)
 
             // Énergie du mouvement : verte quand tu bouges assez.
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.12))
                     Capsule()
-                        .fill(dancing ? Theme.ok : Color.white.opacity(0.5))
+                        .fill(dancing ? Theme.accent.opacity(0.7) : Color.white.opacity(0.4))
                         .frame(width: geo.size.width * min(1, ring.energy))
                         .animation(.linear(duration: 0.15), value: ring.energy)
                 }
@@ -70,10 +83,11 @@ struct DanceView: View {
                     Button("Quitter le test") { ring.cancelTest() }
                 }
             }
-            .font(.subheadline)
+            .font(.subheadline.weight(.bold))
         }
         .padding(20)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).stroke(Theme.accent.opacity(0.6), lineWidth: 2))
     }
 }
 
@@ -97,25 +111,30 @@ struct CameraPreview: UIViewRepresentable {
 
 struct DoneView: View {
     @EnvironmentObject var ring: RingController
+    @State private var bounce = false
 
     var body: some View {
         VStack(spacing: 12) {
             Spacer()
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 88, weight: .thin))
+            Image("Logo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 180)
+                .rotationEffect(.degrees(bounce ? -10 : 10))
+                .animation(.easeInOut(duration: 0.35).repeatForever(autoreverses: true), value: bounce)
+                .onAppear { bounce = true }
+            Text("Bonjour !")
+                .font(.system(size: 40, weight: .black, design: .rounded))
                 .foregroundStyle(Theme.accent)
-            Text("Bonjour")
-                .font(.largeTitle.bold())
             Text(ring.doneText)
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
                 ring.phase = .idle
             } label: {
-                Text("OK").frame(maxWidth: .infinity)
+                Text("C'est parti")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(PillButtonStyle())
         }
         .padding(20)
         .background(Color.black.ignoresSafeArea())

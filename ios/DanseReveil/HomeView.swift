@@ -21,9 +21,22 @@ struct HomeView: View {
         NavigationStack {
             Form {
                 Section {
-                    AlarmHeader()
-                    Toggle("Alarme activée", isOn: armBinding)
+                    VStack(spacing: 18) {
+                        Image("Logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 110)
+                            .rotationEffect(.degrees(settings.isArmed ? -6 : 0))
+                            .animation(.spring(duration: 0.5, bounce: 0.6), value: settings.isArmed)
+                        AlarmHeader()
+                        Button(settings.isArmed ? "Désactiver" : "Activer l'alarme") {
+                            setArmed(!settings.isArmed)
+                        }
+                        .buttonStyle(PillButtonStyle(filled: !settings.isArmed))
                         .disabled(busy)
+                    }
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.clear)
                 }
 
                 Section {
@@ -52,9 +65,12 @@ struct HomeView: View {
                 }
 
                 Section {
-                    Button("Tester l'alarme") {
+                    Button {
                         SoundPlayer.shared.stop()
                         ring.start(test: true)
+                    } label: {
+                        Label("Tester l'alarme", systemImage: "figure.dance")
+                            .fontWeight(.bold)
                     }
                 } footer: {
                     Text("L'alarme sonne même iPhone verrouillé et en mode silencieux. Si tu l'arrêtes sans danser, elle revient toutes les 30 secondes.")
@@ -66,7 +82,9 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationTitle("Réveil")
+            .scrollContentBackground(.hidden)
+            .background(Color.black)
+            .toolbar(.hidden, for: .navigationBar)
         }
         // Si on change un réglage alors que l'alarme est active, on la reprogramme.
         .onChange(of: settings.alarmTime) { _, _ in rearmIfNeeded() }
@@ -120,25 +138,25 @@ struct AlarmHeader: View {
                     let remaining = max(0, Int(target.timeIntervalSince(context.date)))
                     VStack(spacing: 2) {
                         Text(String(format: "%02d:%02d:%02d", remaining / 3600, (remaining % 3600) / 60, remaining % 60))
-                            .font(.system(size: 64, weight: .thin))
+                            .font(.system(size: 60, weight: .heavy, design: .rounded))
                             .monospacedDigit()
-                        Text("avant le réveil à \(target.formatted(date: .omitted, time: .shortened))")
-                            .font(.subheadline)
                             .foregroundStyle(Theme.accent)
+                        Text("de dodo avant \(target.formatted(date: .omitted, time: .shortened))")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
                     }
                 }
             } else {
                 Text(settings.alarmTime.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 64, weight: .thin))
+                    .font(.system(size: 60, weight: .heavy, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.35))
                 Text("Alarme désactivée")
-                    .font(.subheadline)
+                    .font(.headline)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
     }
 
     private func nextFire(after now: Date) -> Date {
@@ -178,6 +196,8 @@ struct SoundListView: View {
                 Section { Text(errorText).foregroundStyle(.red) }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.black)
         .navigationTitle("Sonnerie")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio]) { result in
@@ -196,8 +216,8 @@ struct SoundListView: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 if settings.sound == id {
-                    Image(systemName: "checkmark")
-                        .fontWeight(.semibold)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
                         .foregroundStyle(Theme.accent)
                 }
             }

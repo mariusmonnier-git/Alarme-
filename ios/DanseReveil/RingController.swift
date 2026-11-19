@@ -31,8 +31,8 @@ final class RingController: ObservableObject {
     private var isTest = false
 
     private static let encouragements = [
-        "Bouge plus", "Plus fort", "Lève les bras", "Continue",
-        "Garde le rythme", "Presque fini",
+        "Bouge plus !", "Plus fort !", "Lève les bras !", "Continue !",
+        "Garde le rythme !", "Presque fini !",
     ]
 
     /// À appeler quand l'app s'ouvre : reprend la danse si l'alarme a sonné.
