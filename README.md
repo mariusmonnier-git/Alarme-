@@ -1,4 +1,4 @@
-# 🕺 Danse Réveil
+# 🕺 Dance Up
 
 Une alarme du matin qui **ne s'arrête que si tu danses**.
 

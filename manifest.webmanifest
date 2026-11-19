@@ -1,6 +1,6 @@
 {
-  "name": "Danse Réveil",
-  "short_name": "Danse Réveil",
+  "name": "Dance Up",
+  "short_name": "Dance Up",
   "description": "Une alarme qui ne s'arrête que si tu danses.",
   "start_url": "./",
   "scope": "./",

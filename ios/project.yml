@@ -24,13 +24,13 @@ targets:
     info:
       path: DanseReveil/Info.plist
       properties:
-        CFBundleDisplayName: Danse Réveil
+        CFBundleDisplayName: Dance Up
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIBackgroundModes: [audio]
-        NSAlarmKitUsageDescription: "Danse Réveil a besoin de programmer des alarmes pour te réveiller, même téléphone verrouillé."
+        NSAlarmKitUsageDescription: "Dance Up a besoin de programmer des alarmes pour te réveiller, même téléphone verrouillé."
         NSCameraUsageDescription: "La caméra vérifie que tu danses vraiment pour arrêter l'alarme. Aucune image n'est enregistrée."
         NSMotionUsageDescription: "Les capteurs de mouvement mesurent ta danse quand tu tiens le téléphone en main."
     scheme: {}

@@ -1,4 +1,4 @@
-// Danse Réveil — une alarme qui ne s'arrête que si tu danses.
+// Dance Up — une alarme qui ne s'arrête que si tu danses.
 // Détection : caméra (MediaPipe Pose) ou capteurs de mouvement du téléphone.
 
 const MP_VERSION = "0.10.14";

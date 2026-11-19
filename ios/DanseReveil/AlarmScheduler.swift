@@ -176,7 +176,7 @@ enum AlarmScheduler {
 /// Bouton « Danser » : ouvre l'app sur l'écran de danse.
 struct OpenDanceIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Danser"
-    static var description = IntentDescription("Ouvre Danse Réveil pour arrêter l'alarme en dansant.")
+    static var description = IntentDescription("Ouvre Dance Up pour arrêter l'alarme en dansant.")
     static var openAppWhenRun: Bool = true
 
     @Parameter(title: "alarmID")

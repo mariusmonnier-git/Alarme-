@@ -103,7 +103,7 @@ struct HomeView: View {
         Task {
             defer { busy = false }
             guard await AlarmScheduler.requestAuthorization() else {
-                errorText = "Autorise les alarmes dans Réglages › Danse Réveil."
+                errorText = "Autorise les alarmes dans Réglages › Dance Up."
                 return
             }
             if settings.mode == .camera { _ = await AVCaptureDevice.requestAccess(for: .video) }
