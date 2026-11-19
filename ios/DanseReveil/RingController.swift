@@ -173,6 +173,24 @@ final class RingController: ObservableObject {
 
     var canCancel: Bool { isTest }
 
+    /// Mode démo (captures d'écran) : affiche un écran figé, sans son ni capteurs.
+    func showDemo(_ screen: String) {
+        target = 30
+        mode = .motion
+        switch screen {
+        case "dance":
+            progress = 18
+            energy = 0.7
+            message = "Plus fort !"
+            phase = .ringing
+        case "done":
+            doneText = "Alarme arrêtée en 0 min 42 s"
+            phase = .done
+        default:
+            phase = .idle
+        }
+    }
+
     private func stopEverything() {
         timer?.invalidate()
         timer = nil

@@ -16,11 +16,18 @@ struct DanseReveilApp: App {
                 .tint(Theme.accent)
                 .fontDesign(.rounded)
                 .onChange(of: scenePhase) { _, phase in
-                    guard phase == .active else { return }
+                    guard phase == .active, Demo.screen == nil else { return }
                     ring.resumeIfNeeded()
                     Task { await AlarmScheduler.ensureScheduled(settings) }
                 }
                 .task {
+                    // Mode démo pour les captures : xcrun simctl launch … -demo dance
+                    if let demo = Demo.screen {
+                        settings.isArmed = Demo.armed
+                        settings.repeatDaily = true
+                        ring.showDemo(demo)
+                        return
+                    }
                     ring.resumeIfNeeded()
                     await AlarmScheduler.ensureScheduled(settings)
                     // Si l'alarme sonne pendant que l'app est ouverte, on passe direct à la danse.
@@ -44,11 +51,19 @@ struct RootView: View {
 
     var body: some View {
         switch ring.phase {
+        case .idle where Demo.screen == "sounds":
+            NavigationStack { SoundListView() }
         case .idle: HomeView()
         case .ringing: DanceView()
         case .done: DoneView()
         }
     }
+}
+
+/// Arguments de lancement utilisés seulement pour les captures d'écran automatiques.
+enum Demo {
+    static var screen: String? { UserDefaults.standard.string(forKey: "demo") }
+    static var armed: Bool { UserDefaults.standard.bool(forKey: "demoArmed") }
 }
 
 /// Style du logo : orange vif sur noir, formes rondes et épaisses.

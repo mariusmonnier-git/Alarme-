@@ -1,0 +1,66 @@
+name: Captures d'écran iPhone
+
+on:
+  push:
+    paths: ["ios/**", ".github/workflows/screenshots.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Générer le projet Xcode
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Démarrer un simulateur d'iPhone
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devs = [d for rt, ds in json.load(sys.stdin)["devices"].items() if "iOS" in rt for d in ds if d["name"].startswith("iPhone")]
+          pro = [d for d in devs if d["name"].endswith("Pro")]
+          print((pro or devs)[-1]["udid"])')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices | grep "$UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Compiler et installer l'app
+        working-directory: ios
+        run: |
+          xcodebuild -project DanseReveil.xcodeproj -scheme DanseReveil -configuration Debug \
+            -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build build -quiet
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/DanseReveil.app
+
+      - name: Prendre les captures
+        run: |
+          xcrun simctl status_bar "$UDID" override --time "23:14" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          mkdir -p screenshots
+          shot() {
+            xcrun simctl terminate "$UDID" com.dansereveil.app 2>/dev/null || true
+            xcrun simctl launch "$UDID" com.dansereveil.app -demo "$2" -demoArmed "$3"
+            sleep 6
+            xcrun simctl io "$UDID" screenshot "screenshots/$1.png"
+          }
+          shot 1-accueil-desactivee home NO
+          shot 2-accueil-activee home YES
+          shot 3-sonneries sounds NO
+          shot 4-danse dance YES
+          shot 5-fin done YES
+          ls -la screenshots
+
+      - name: Enregistrer les captures dans le dépôt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add screenshots
+          git commit -m "Captures d'écran de l'app iPhone [skip ci]" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"
