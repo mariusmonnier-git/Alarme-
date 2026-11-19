@@ -31,8 +31,8 @@ final class RingController: ObservableObject {
     private var isTest = false
 
     private static let encouragements = [
-        "Allez, bouge ! 💃", "Plus fort ! 🔥", "Lève les bras ! 🙌", "Secoue-toi ! 🕺",
-        "Continue comme ça ! ✨", "Tu y es presque ! 🚀",
+        "Bouge plus", "Plus fort", "Lève les bras", "Continue",
+        "Garde le rythme", "Presque fini",
     ]
 
     /// À appeler quand l'app s'ouvre : reprend la danse si l'alarme a sonné.
@@ -57,8 +57,8 @@ final class RingController: ObservableObject {
 
         if !test {
             AlarmScheduler.stopAlerting()
-            // Si tu quittes l'app sans finir, l'alarme système revient dans 3 min.
-            Task { await AlarmScheduler.scheduleRetry(after: 180) }
+            // Pendant la danse, les relances sont repoussées à 3 min (si tu quittes l'app, ça resonne).
+            Task { await AlarmScheduler.postponeChain(by: 180) }
         }
         SoundPlayer.shared.start(soundID: settings.sound)
         startDetector()
@@ -86,7 +86,7 @@ final class RingController: ObservableObject {
                 Task { @MainActor in
                     guard let self, self.phase == .ringing, self.mode == .camera else { return }
                     if ok { self.ready = true } else {
-                        self.switchToMotion("Caméra indisponible : danse avec le téléphone en main !")
+                        self.switchToMotion("Caméra indisponible : danse téléphone en main")
                     }
                 }
             }
@@ -96,9 +96,9 @@ final class RingController: ObservableObject {
     }
 
     private func startMotion() {
-        message = "Prends ton téléphone et danse !"
+        message = "Danse avec le téléphone en main"
         guard motion.isAvailable else {
-            message = "Capteurs de mouvement indisponibles 😕"
+            message = "Capteurs de mouvement indisponibles"
             return
         }
         motion.onUpdate = { [weak self] e in
@@ -129,7 +129,7 @@ final class RingController: ObservableObject {
         }
 
         if let lost = lostSince, now.timeIntervalSince(lost) > 0.8 {
-            message = "Je ne te vois pas ! Recule-toi devant la caméra 👀"
+            message = "Recule-toi : on ne te voit pas"
         } else if ready {
             let pct = min(1, progress / Double(target))
             let idx = dancing ? 1 + Int(pct * Double(Self.encouragements.count - 2)) : 0
@@ -148,16 +148,17 @@ final class RingController: ObservableObject {
     private func finish() {
         stopEverything()
         let secs = Int(Date().timeIntervalSince(startedAt))
-        doneText = "Alarme vaincue en \(secs / 60) min \(String(format: "%02d", secs % 60)) s."
+        doneText = "Alarme arrêtée en \(secs / 60) min \(String(format: "%02d", secs % 60)) s"
         if !isTest {
-            AlarmState.needsDance = false
             AlarmState.danceDoneAt = Date()
-            AlarmScheduler.cancelRetries()
+            AlarmScheduler.cancelChain()
             AlarmScheduler.stopAlerting()
             let settings = AppSettings.shared
-            if !settings.repeatDaily {
+            if settings.repeatDaily {
+                Task { try? await AlarmScheduler.arm(settings) }  // alarme de demain
+            } else {
+                AlarmScheduler.disarm()
                 settings.isArmed = false
-                AlarmState.mainID = nil
             }
         }
         phase = .done

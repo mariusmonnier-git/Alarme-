@@ -3,67 +3,77 @@ import SwiftUI
 
 struct DanceView: View {
     @EnvironmentObject var ring: RingController
-    @State private var pulse = false
+
+    private var dancing: Bool { ring.energy >= RingController.threshold }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Color.black
-                if ring.mode == .camera {
-                    CameraPreview(session: ring.camera.session)
-                } else {
-                    Text("📱")
-                        .font(.system(size: 120))
-                        .rotationEffect(.degrees(sin(Date().timeIntervalSince1970 * 8) * ring.energy * 25))
-                        .scaleEffect(1 + ring.energy * 0.3)
-                }
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+
+            if ring.mode == .camera {
+                CameraPreview(session: ring.camera.session)
+                    .ignoresSafeArea()
+            } else {
+                Image(systemName: "figure.dance")
+                    .font(.system(size: 150, weight: .ultraLight))
+                    .foregroundStyle(.white)
+                    .rotationEffect(.degrees(sin(Date().timeIntervalSince1970 * 8) * ring.energy * 20))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
 
-            VStack(spacing: 8) {
-                Text("DANSE !")
-                    .font(.system(size: 44, weight: .black))
-                    .foregroundStyle(Theme.gradient)
-                    .scaleEffect(pulse ? 1.08 : 1)
-                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: pulse)
-                Text(ring.message).font(.title3).frame(minHeight: 28)
-
-                bar(value: min(1, ring.energy), height: 12,
-                    fill: ring.energy >= RingController.threshold ? AnyShapeStyle(Theme.green) : AnyShapeStyle(Theme.orange))
-                bar(value: min(1, ring.progress / Double(ring.target)), height: 22,
-                    fill: AnyShapeStyle(LinearGradient(colors: [Theme.pink, Theme.green], startPoint: .leading, endPoint: .trailing)))
-                Text("\(Int(ring.progress)) / \(ring.target) s")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.muted)
-
-                HStack {
-                    if ring.mode == .camera {
-                        Button("Passer en mode téléphone en main") { ring.switchToMotion() }
-                    }
-                    if ring.canCancel {
-                        Button("Quitter le test") { ring.cancelTest() }
-                    }
-                }
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.8))
-            }
-            .padding(16)
-            .background(Color(red: 0.08, green: 0.06, blue: 0.16))
+            panel
+                .padding(12)
         }
-        .ignoresSafeArea(edges: .top)
-        .onAppear { pulse = true }
     }
 
-    private func bar(value: Double, height: CGFloat, fill: AnyShapeStyle) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.1))
-                Capsule().fill(fill).frame(width: geo.size.width * value)
-                    .animation(.linear(duration: 0.15), value: value)
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(dancing ? Theme.ok : Color.white.opacity(0.35))
+                    .frame(width: 10, height: 10)
+                Text(ring.message)
+                    .font(.headline)
+                Spacer()
             }
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(Int(ring.progress))")
+                    .font(.system(size: 64, weight: .thin))
+                    .monospacedDigit()
+                Text("/ \(ring.target) s")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: min(1, ring.progress / Double(ring.target)))
+                .tint(Theme.accent)
+
+            // Énergie du mouvement : verte quand tu bouges assez.
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.12))
+                    Capsule()
+                        .fill(dancing ? Theme.ok : Color.white.opacity(0.5))
+                        .frame(width: geo.size.width * min(1, ring.energy))
+                        .animation(.linear(duration: 0.15), value: ring.energy)
+                }
+            }
+            .frame(height: 4)
+
+            HStack {
+                if ring.mode == .camera {
+                    Button("Téléphone en main") { ring.switchToMotion() }
+                }
+                Spacer()
+                if ring.canCancel {
+                    Button("Quitter le test") { ring.cancelTest() }
+                }
+            }
+            .font(.subheadline)
         }
-        .frame(height: height)
+        .padding(20)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 }
 
@@ -89,24 +99,25 @@ struct DoneView: View {
     @EnvironmentObject var ring: RingController
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             Spacer()
-            Text("🌞").font(.system(size: 96))
-            Text("Bien joué, t'es réveillé·e !").font(.title.bold()).multilineTextAlignment(.center)
-            Text(ring.doneText).foregroundStyle(Theme.muted)
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 88, weight: .thin))
+                .foregroundStyle(Theme.accent)
+            Text("Bonjour")
+                .font(.largeTitle.bold())
+            Text(ring.doneText)
+                .foregroundStyle(.secondary)
             Spacer()
             Button {
                 ring.phase = .idle
             } label: {
-                Text("Retour")
-                    .font(.title3.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(18)
-                    .background(Theme.gradient)
-                    .foregroundStyle(Color(red: 0.1, green: 0.06, blue: 0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                Text("OK").frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
-        .padding(16)
+        .padding(20)
+        .background(Color.black.ignoresSafeArea())
     }
 }

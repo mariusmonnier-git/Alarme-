@@ -4,11 +4,12 @@ import SwiftUI
 enum DanceMode: String, CaseIterable, Identifiable {
     case camera, motion
     var id: String { rawValue }
-    var label: String { self == .camera ? "📷 Caméra" : "📱 En main" }
+    var label: String { self == .camera ? "Caméra" : "Téléphone en main" }
+    var symbol: String { self == .camera ? "camera" : "iphone.radiowaves.left.and.right" }
     var hint: String {
         self == .camera
-            ? "Pose le téléphone face à toi (à 2 m environ) : la caméra vérifie que tout ton corps bouge."
-            : "Tiens le téléphone en main et danse : bras, hanches, sauts… il faut que ça secoue !"
+            ? "Pose l'iPhone face à toi, à environ 2 mètres. La caméra vérifie que tout ton corps bouge."
+            : "Tiens l'iPhone en main et danse. Il faut que ça bouge franchement."
     }
 }
 
@@ -16,16 +17,17 @@ struct AlarmSound: Identifiable, Hashable {
     let id: String
     let label: String
     let file: String
+    var symbol: String = "bell"
 }
 
 /// Sonneries intégrées + musique perso (copiée dans Library/Sounds pour qu'AlarmKit la trouve).
 enum Sounds {
     static let builtIn: [AlarmSound] = [
-        .init(id: "classique", label: "🔔 Classique", file: "classique.wav"),
-        .init(id: "bipbip", label: "⌚ Bip-bip", file: "bipbip.wav"),
-        .init(id: "sirene", label: "🚨 Sirène", file: "sirene.wav"),
-        .init(id: "disco", label: "🪩 Disco", file: "disco.wav"),
-        .init(id: "cocorico", label: "🐓 Cocorico", file: "cocorico.wav"),
+        .init(id: "classique", label: "Classique", file: "classique.wav", symbol: "bell"),
+        .init(id: "bipbip", label: "Bip-bip", file: "bipbip.wav", symbol: "applewatch"),
+        .init(id: "sirene", label: "Sirène", file: "sirene.wav", symbol: "light.beacon.max"),
+        .init(id: "disco", label: "Disco", file: "disco.wav", symbol: "music.quarternote.3"),
+        .init(id: "cocorico", label: "Cocorico", file: "cocorico.wav", symbol: "sunrise"),
     ]
     static let customID = "custom"
     static let customFile = "danse-reveil-custom.caf"

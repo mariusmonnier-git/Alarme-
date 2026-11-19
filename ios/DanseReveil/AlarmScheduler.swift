@@ -6,7 +6,13 @@ import SwiftUI
 
 struct DanceMetadata: AlarmMetadata {}
 
-/// État partagé entre l'app et les intents des boutons de l'alarme.
+/// Une alarme programmée dans iOS (principale ou relance).
+struct ScheduledAlarm: Codable {
+    let id: UUID
+    let date: Date
+}
+
+/// État partagé entre l'app et les boutons de l'alarme (intents).
 enum AlarmState {
     private static let d = UserDefaults.standard
 
@@ -14,27 +20,44 @@ enum AlarmState {
         get { d.string(forKey: "mainAlarmID").flatMap(UUID.init(uuidString:)) }
         set { d.set(newValue?.uuidString, forKey: "mainAlarmID") }
     }
-    static var retryIDs: [UUID] {
-        get { (d.stringArray(forKey: "retryAlarmIDs") ?? []).compactMap(UUID.init(uuidString:)) }
-        set { d.set(newValue.map(\.uuidString), forKey: "retryAlarmIDs") }
+
+    /// Heure de la prochaine (ou dernière) sonnerie principale.
+    static var nextFire: Date? {
+        get { d.object(forKey: "nextFire") as? Date }
+        set { d.set(newValue, forKey: "nextFire") }
     }
-    /// L'alarme a sonné et tu n'as pas encore dansé.
-    static var needsDance: Bool {
-        get { d.bool(forKey: "needsDance") }
-        set { d.set(newValue, forKey: "needsDance") }
+
+    /// Relances programmées toutes les 30 s après la sonnerie principale.
+    static var chain: [ScheduledAlarm] {
+        get {
+            guard let data = d.data(forKey: "alarmChain") else { return [] }
+            return (try? JSONDecoder().decode([ScheduledAlarm].self, from: data)) ?? []
+        }
+        set { d.set(try? JSONEncoder().encode(newValue), forKey: "alarmChain") }
     }
+
     static var danceDoneAt: Date? {
         get { d.object(forKey: "danceDoneAt") as? Date }
         set { d.set(newValue, forKey: "danceDoneAt") }
     }
-    static var dancedRecently: Bool {
-        guard let done = danceDoneAt else { return false }
-        return Date().timeIntervalSince(done) < 10 * 60
+
+    /// L'alarme a sonné et tu n'as pas encore dansé (fenêtre de 2 h).
+    /// Calculé à partir de l'heure, donc vrai même si aucun bouton n'a été touché.
+    static var needsDance: Bool {
+        guard d.bool(forKey: "isArmed"), let fire = nextFire else { return false }
+        let now = Date()
+        guard fire <= now, now.timeIntervalSince(fire) < 2 * 3600 else { return false }
+        if let done = danceDoneAt, done >= fire { return false }
+        return true
     }
 }
 
 enum AlarmScheduler {
     static var manager: AlarmManager { AlarmManager.shared }
+
+    /// Intervalle entre deux relances, et nombre de relances programmées d'avance (15 min).
+    static let retryInterval: TimeInterval = 30
+    static let chainLength = 30
 
     static func requestAuthorization() async -> Bool {
         switch manager.authorizationState {
@@ -44,7 +67,7 @@ enum AlarmScheduler {
         }
     }
 
-    static func configuration(id: UUID, schedule: Alarm.Schedule, title: LocalizedStringResource)
+    static func configuration(id: UUID, date: Date, title: LocalizedStringResource)
         -> AlarmManager.AlarmConfiguration<DanceMetadata>
     {
         let alert = AlarmPresentation.Alert(
@@ -55,11 +78,11 @@ enum AlarmScheduler {
         let attributes = AlarmAttributes<DanceMetadata>(
             presentation: AlarmPresentation(alert: alert),
             metadata: DanceMetadata(),
-            tintColor: Color(red: 1, green: 0.31, blue: 0.64)
+            tintColor: Theme.accent
         )
         let soundID = UserDefaults.standard.string(forKey: "sound") ?? "classique"
         return .alarm(
-            schedule: schedule,
+            schedule: .fixed(date),
             attributes: attributes,
             stopIntent: StopAlarmIntent(alarmID: id.uuidString),
             secondaryIntent: OpenDanceIntent(alarmID: id.uuidString),
@@ -67,44 +90,76 @@ enum AlarmScheduler {
         )
     }
 
-    /// Programme l'alarme principale (remplace la précédente).
+    /// Programme la prochaine sonnerie + ses relances (remplace tout ce qui existait).
     static func arm(_ settings: AppSettings) async throws {
-        if let old = AlarmState.mainID { try? manager.cancel(id: old) }
-        let schedule: Alarm.Schedule
-        if settings.repeatDaily {
-            let time = Alarm.Schedule.Relative.Time(hour: settings.hour, minute: settings.minute)
-            let days: [Locale.Weekday] = [.monday, .tuesday, .wednesday, .thursday, .friday, .saturday, .sunday]
-            schedule = .relative(.init(time: time, repeats: .weekly(days)))
-        } else {
-            schedule = .fixed(settings.nextAlarmDate())
-        }
+        cancelAll()
+        let date = settings.nextAlarmDate()
         let id = UUID()
         _ = try await manager.schedule(
-            id: id, configuration: configuration(id: id, schedule: schedule, title: "Debout ! Il faut danser 💃"))
+            id: id, configuration: configuration(id: id, date: date, title: "Debout ! Danse pour arrêter"))
         AlarmState.mainID = id
+        AlarmState.nextFire = date
+        await scheduleChain(from: date.addingTimeInterval(retryInterval), count: chainLength)
     }
 
     static func disarm() {
+        cancelAll()
+        AlarmState.nextFire = nil
+    }
+
+    /// Ajoute `count` relances, toutes les 30 s à partir de `start`.
+    static func scheduleChain(from start: Date, count: Int) async {
+        var chain = AlarmState.chain
+        for i in 0..<count {
+            let id = UUID()
+            let date = start.addingTimeInterval(Double(i) * retryInterval)
+            let cfg = configuration(id: id, date: date, title: "Pas si vite ! Il faut danser")
+            if (try? await manager.schedule(id: id, configuration: cfg)) != nil {
+                chain.append(ScheduledAlarm(id: id, date: date))
+            }
+        }
+        AlarmState.chain = chain
+    }
+
+    static func cancelChain() {
+        for alarm in AlarmState.chain { try? manager.cancel(id: alarm.id) }
+        AlarmState.chain = []
+    }
+
+    static func cancelAll() {
         if let id = AlarmState.mainID { try? manager.cancel(id: id) }
         AlarmState.mainID = nil
-        cancelRetries()
-        AlarmState.needsDance = false
+        cancelChain()
     }
 
-    /// Relance : l'alarme resonne dans `seconds` tant que tu n'as pas dansé.
-    static func scheduleRetry(after seconds: TimeInterval) async {
-        cancelRetries()
-        let id = UUID()
-        let cfg = configuration(
-            id: id, schedule: .fixed(Date().addingTimeInterval(seconds)), title: "Pas si vite ! Danse pour arrêter 🕺")
-        if (try? await manager.schedule(id: id, configuration: cfg)) != nil {
-            AlarmState.retryIDs = [id]
+    /// Repousse les relances : la prochaine sonnera dans `seconds`.
+    static func postponeChain(by seconds: TimeInterval) async {
+        cancelChain()
+        await scheduleChain(from: Date().addingTimeInterval(seconds), count: chainLength)
+    }
+
+    /// S'il reste peu de relances à venir, on en rajoute.
+    static func extendChainIfNeeded() async {
+        let now = Date()
+        let chain = AlarmState.chain
+        let future = chain.filter { $0.date > now }
+        guard future.count < 4 else { return }
+        let last = chain.map(\.date).max() ?? now
+        let start = max(last, now).addingTimeInterval(retryInterval)
+        await scheduleChain(from: start, count: chainLength - future.count)
+    }
+
+    /// À l'ouverture de l'app : programme l'alarme du jour suivant si besoin,
+    /// ou désactive une alarme unique déjà passée.
+    static func ensureScheduled(_ settings: AppSettings) async {
+        guard settings.isArmed, !AlarmState.needsDance else { return }
+        if let fire = AlarmState.nextFire, fire > Date() { return }
+        if settings.repeatDaily {
+            try? await arm(settings)
+        } else {
+            cancelAll()
+            settings.isArmed = false
         }
-    }
-
-    static func cancelRetries() {
-        for id in AlarmState.retryIDs { try? manager.cancel(id: id) }
-        AlarmState.retryIDs = []
     }
 
     /// Coupe le son système des alarmes en cours (l'app prend le relais).
@@ -131,18 +186,18 @@ struct OpenDanceIntent: LiveActivityIntent {
     init() { self.alarmID = "" }
 
     func perform() async throws -> some IntentResult {
-        AlarmState.needsDance = true
         AlarmScheduler.stopAlerting()
-        // Filet de sécurité : si tu te rendors sans danser, ça resonne dans 3 min.
-        await AlarmScheduler.scheduleRetry(after: 180)
+        // Pendant que tu danses, pas de relance avant 3 min. Si tu te rendors, ça repart.
+        await AlarmScheduler.postponeChain(by: 180)
         return .result()
     }
 }
 
-/// Bouton « Arrêter » : arrête le son… mais l'alarme revient dans 1 min si tu n'as pas dansé.
+/// Bouton « Arrêter » (imposé par iOS) : coupe le son, mais les relances
+/// déjà programmées font resonner l'alarme toutes les 30 s tant que tu n'as pas dansé.
 struct StopAlarmIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Arrêter"
-    static var description = IntentDescription("Arrête l'alarme. Elle revient si tu n'as pas dansé.")
+    static var description = IntentDescription("Arrête la sonnerie. Elle revient tant que tu n'as pas dansé.")
 
     @Parameter(title: "alarmID")
     var alarmID: String
@@ -152,10 +207,7 @@ struct StopAlarmIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         if let id = UUID(uuidString: alarmID) { try? AlarmManager.shared.stop(id: id) }
-        if !AlarmState.dancedRecently {
-            AlarmState.needsDance = true
-            await AlarmScheduler.scheduleRetry(after: 60)
-        }
+        if AlarmState.needsDance { await AlarmScheduler.extendChainIfNeeded() }
         return .result()
     }
 }
