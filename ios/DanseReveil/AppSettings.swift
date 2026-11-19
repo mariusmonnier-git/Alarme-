@@ -114,6 +114,22 @@ final class AppSettings: ObservableObject {
         return now.addingTimeInterval(86400)
     }
 
+    /// Sonneries à programmer : la prochaine, plus (si répétition) toutes celles des 7 jours suivants.
+    func upcomingAlarmDates(from now: Date = Date()) -> [Date] {
+        let first = nextAlarmDate(from: now)
+        guard repeats else { return [first] }
+        let cal = Calendar.current
+        var dates: [Date] = []
+        for offset in 0...7 {
+            guard let day = cal.date(byAdding: .day, value: offset, to: now),
+                  let date = cal.date(bySettingHour: hour, minute: minute, second: 0, of: day),
+                  date > now, date.timeIntervalSince(now) <= 7 * 86400,
+                  weekdays.contains(cal.component(.weekday, from: date)) else { continue }
+            dates.append(date)
+        }
+        return dates.isEmpty ? [first] : dates
+    }
+
     var daysSummary: String {
         if weekdays.isEmpty { return "Une fois" }
         let prefix = repeatWeekly ? "" : "Une fois : "

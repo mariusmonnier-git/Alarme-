@@ -42,8 +42,13 @@ final class SoundPlayer {
 
     func stop() {
         previewToken = UUID()
+        let wasPlaying = player != nil
         player?.stop()
         player = nil
+        // Rend la main aux autres apps (Musique, Spotify…) qui reprennent leur lecture.
+        if wasPlaying {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     var isPlaying: Bool { player?.isPlaying ?? false }

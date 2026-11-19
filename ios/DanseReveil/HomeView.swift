@@ -7,10 +7,7 @@ struct HomeView: View {
     @EnvironmentObject var ring: RingController
     @State private var errorText: String?
     @State private var busy = false
-
-    private var armBinding: Binding<Bool> {
-        Binding(get: { settings.isArmed }, set: { setArmed($0) })
-    }
+    @State private var rearmTask: Task<Void, Never>?
 
     private var soundName: String {
         if settings.sound == Sounds.customID, Sounds.hasCustom { return settings.customName }
@@ -123,8 +120,9 @@ struct HomeView: View {
                 ring.resumeIfNeeded()
                 return
             }
-            AlarmScheduler.disarm()
+            rearmTask?.cancel()
             settings.isArmed = false
+            Task { await AlarmScheduler.disarm() }
             return
         }
         busy = true
@@ -144,9 +142,14 @@ struct HomeView: View {
         }
     }
 
+    /// Reprogramme l'alarme après un changement de réglage. On attend que tu aies fini de tourner
+    /// la molette (0,8 s) pour ne pas reprogrammer à chaque cran.
     private func rearmIfNeeded() {
         guard settings.isArmed, !AlarmState.needsDance else { return }
-        Task {
+        rearmTask?.cancel()
+        rearmTask = Task {
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, settings.isArmed, !AlarmState.needsDance else { return }
             do { try await AlarmScheduler.arm(settings) } catch {
                 errorText = "Impossible de reprogrammer l'alarme : \(error.localizedDescription)"
             }
@@ -202,7 +205,7 @@ struct AlarmHeader: View {
     }
 
     private func nextFire(after now: Date) -> Date {
-        if let fire = AlarmState.nextFire, fire > now { return fire }
+        if let fire = AlarmState.upcomingFire, fire > now { return fire }
         return settings.nextAlarmDate(from: now)
     }
 }
@@ -275,7 +278,7 @@ struct SoundListView: View {
             // Si la musique perso était déjà choisie, onChange ne se déclenche pas : on reprogramme nous-mêmes
             // pour que l'alarme utilise le nouveau fichier.
             if alreadyCustom, settings.isArmed, !AlarmState.needsDance {
-                Task { try? await AlarmScheduler.arm(settings) }
+                Task { try? await AlarmScheduler.arm(settings) }  // arm() passe par la file : pas de doublon
             }
             SoundPlayer.shared.preview(soundID: Sounds.customID)
             errorText = nil

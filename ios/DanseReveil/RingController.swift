@@ -17,6 +17,8 @@ final class RingController: ObservableObject {
     @Published var mode: DanceMode = .camera
     @Published var target = 30
     @Published var doneText = ""
+    /// Avertissement affiché sur l'écran de fin (ex. : alarme suivante impossible à programmer).
+    @Published var doneNote = ""
 
     static let threshold = 0.35
 
@@ -170,14 +172,22 @@ final class RingController: ObservableObject {
             AlarmState.danceDoneAt = Date()
             AlarmState.danceRequestedAt = nil
             AlarmScheduler.stopAlerting()
-            AlarmScheduler.disarm()
+            doneNote = ""
             let settings = AppSettings.shared
+            // Tout passe par la file de programmation : rien ne peut être reprogrammé APRÈS cette annulation.
             if settings.isArmed && settings.repeats {
                 Task {
-                    do { try await AlarmScheduler.arm(settings) } catch { settings.isArmed = false }
+                    do {
+                        try await AlarmScheduler.arm(settings)  // annule tout, puis programme les prochaines
+                    } catch {
+                        await AlarmScheduler.disarm()
+                        settings.isArmed = false
+                        doneNote = "L'alarme suivante n'a pas pu être programmée : \(error.localizedDescription)"
+                    }
                 }
             } else {
                 settings.isArmed = false
+                Task { await AlarmScheduler.disarm() }
             }
         }
         phase = .done

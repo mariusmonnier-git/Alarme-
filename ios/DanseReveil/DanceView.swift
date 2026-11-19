@@ -135,6 +135,12 @@ struct DoneView: View {
                 .foregroundStyle(Theme.accent)
             Text(ring.doneText)
                 .foregroundStyle(.secondary)
+            if !ring.doneNote.isEmpty {
+                Label(ring.doneNote, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                    .multilineTextAlignment(.center)
+            }
             Spacer()
             Button {
                 ring.phase = .idle

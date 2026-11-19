@@ -19,16 +19,20 @@ enum AlarmState {
     /// Au-delà, une alarme qui n'a pas été suivie d'une danse est considérée comme ratée.
     static let missedAfter: TimeInterval = 3 * 3600
 
-    static var mainID: UUID? {
-        get { d.string(forKey: "mainAlarmID").flatMap(UUID.init(uuidString:)) }
-        set { d.set(newValue?.uuidString, forKey: "mainAlarmID") }
+    /// Sonneries principales programmées (la prochaine + celles des jours suivants s'il y a répétition).
+    static var mains: [ScheduledAlarm] {
+        get {
+            guard let data = d.data(forKey: "mainAlarms") else { return [] }
+            return (try? JSONDecoder().decode([ScheduledAlarm].self, from: data)) ?? []
+        }
+        set { d.set(try? JSONEncoder().encode(newValue), forKey: "mainAlarms") }
     }
 
-    /// Heure de la prochaine (ou dernière) sonnerie principale.
-    static var nextFire: Date? {
-        get { d.object(forKey: "nextFire") as? Date }
-        set { d.set(newValue, forKey: "nextFire") }
-    }
+    /// Prochaine sonnerie principale à venir.
+    static var upcomingFire: Date? { mains.map(\.date).filter { $0 > Date() }.min() }
+
+    /// Dernière sonnerie principale déjà passée.
+    static var lastFiredMain: Date? { mains.map(\.date).filter { $0 <= Date() }.max() }
 
     /// Relances programmées (sert seulement à savoir combien il en reste à venir).
     static var chain: [ScheduledAlarm] {
@@ -68,7 +72,7 @@ enum AlarmState {
         var candidates: [Date] = []
         if let since = ringingSince { candidates.append(since) }
         // La sonnerie principale est passée, même si personne n'a touché l'alarme.
-        if d.bool(forKey: "isArmed"), let fire = nextFire, fire <= now { candidates.append(fire) }
+        if d.bool(forKey: "isArmed"), let fire = lastFiredMain { candidates.append(fire) }
         guard let since = candidates.max(), now.timeIntervalSince(since) < missedAfter else { return false }
         if let done = danceDoneAt, done >= since { return false }
         return true
@@ -145,44 +149,58 @@ enum AlarmScheduler {
     }
 
     /// Programme la prochaine sonnerie + ses relances (remplace tout ce qui existait).
+    /// Programme les prochaines sonneries + les relances de la première (remplace tout ce qui existait).
+    /// En mode répétition, toutes les sonneries des 7 prochains jours sont programmées d'avance :
+    /// une matinée ratée n'empêche pas l'alarme du lendemain de sonner.
     static func arm(_ settings: AppSettings) async throws {
-        let date = settings.nextAlarmDate()
-        if let expiry = Provisioning.expirationDate, date >= expiry {
-            throw AlarmSchedulerError.appExpires(expiry)
+        var dates = settings.upcomingAlarmDates()
+        guard let first = dates.first else { return }
+        if let expiry = Provisioning.expirationDate {
+            if first >= expiry { throw AlarmSchedulerError.appExpires(expiry) }
+            dates = dates.filter { $0 < expiry }
         }
         var failure: Error?
         await SchedulerQueue.shared.run {
             cancelEverything()
-            let id = UUID()
-            do {
-                _ = try await manager.schedule(
-                    id: id, configuration: configuration(id: id, date: date, title: "Debout ! Danse pour arrêter"))
-                AlarmState.mainID = id
-                AlarmState.nextFire = date
-                await scheduleChain(from: date.addingTimeInterval(retryInterval), count: chainLength)
-            } catch {
-                failure = error
+            var mains: [ScheduledAlarm] = []
+            for (index, date) in dates.enumerated() {
+                let id = UUID()
+                do {
+                    _ = try await manager.schedule(
+                        id: id, configuration: configuration(id: id, date: date, title: "Debout ! Danse pour arrêter"))
+                    mains.append(ScheduledAlarm(id: id, date: date))
+                } catch {
+                    if index == 0 {
+                        failure = error
+                        break
+                    }
+                }
+            }
+            AlarmState.mains = mains
+            if failure == nil {
+                await scheduleChain(from: first.addingTimeInterval(retryInterval), count: chainLength)
             }
         }
         if let failure { throw failure }
     }
 
-    static func disarm() {
-        cancelEverything()
-        AlarmState.nextFire = nil
+    /// Supprime toutes les alarmes (dans la file, après une éventuelle programmation en cours).
+    static func disarm() async {
+        await SchedulerQueue.shared.run { cancelEverything() }
     }
 
     /// Annule absolument toutes les alarmes de l'app, sans se fier aux identifiants enregistrés.
-    static func cancelEverything() {
+    private static func cancelEverything() {
         for alarm in allAlarms { try? manager.cancel(id: alarm.id) }
-        AlarmState.mainID = nil
+        AlarmState.mains = []
         AlarmState.chain = []
     }
 
-    /// Annule toutes les relances, mais garde la sonnerie principale si elle est encore à venir.
-    static func cancelRelances() {
-        let keep = (AlarmState.nextFire.map { $0 > Date() } ?? false) ? AlarmState.mainID : nil
-        for alarm in allAlarms where alarm.id != keep { try? manager.cancel(id: alarm.id) }
+    /// Annule toutes les relances, mais garde les sonneries principales encore à venir.
+    private static func cancelRelances() {
+        let now = Date()
+        let keep = Set(AlarmState.mains.filter { $0.date > now }.map(\.id))
+        for alarm in allAlarms where !keep.contains(alarm.id) { try? manager.cancel(id: alarm.id) }
         AlarmState.chain = []
     }
 
@@ -225,21 +243,24 @@ enum AlarmScheduler {
         guard !AlarmState.needsDance else { return }
         guard settings.isArmed else {
             // Alarme désactivée et pas de danse due : aucune alarme ne doit rester.
-            if !allAlarms.isEmpty { cancelEverything() }
+            if !allAlarms.isEmpty { await disarm() }
             return
         }
-        if let fire = AlarmState.nextFire, fire > Date() { return }
-        // La sonnerie est passée (danse faite, ou ratée depuis plus de 3 h).
-        if settings.repeats {
-            do { try await arm(settings) } catch { disarmAndForget(settings) }
+        let known = Set(allAlarms.map(\.id))
+        let future = AlarmState.mains.filter { $0.date > Date() }
+        let lost = future.contains { !known.contains($0.id) }  // iOS ne la connaît plus
+        if !future.isEmpty && !lost { return }
+        // Plus rien à venir (sonnerie passée, ratée depuis plus de 3 h) ou alarme perdue : on reprogramme.
+        if settings.repeats || lost {
+            do { try await arm(settings) } catch { await disarmAndForget(settings) }
         } else {
-            disarmAndForget(settings)
+            await disarmAndForget(settings)
         }
     }
 
-    private static func disarmAndForget(_ settings: AppSettings) {
-        disarm()
-        settings.isArmed = false
+    private static func disarmAndForget(_ settings: AppSettings) async {
+        await disarm()
+        await MainActor.run { settings.isArmed = false }
     }
 
     /// Coupe le son système des alarmes en cours (l'app prend le relais).
