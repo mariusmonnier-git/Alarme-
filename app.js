@@ -331,10 +331,9 @@ let ticker = null;
 function tick() {
   const now = new Date();
   $("now-clock").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const diff = nextAlarmDate() - now;
-  const h = Math.floor(diff / 3.6e6);
-  const m = Math.floor((diff % 3.6e6) / 6e4);
-  $("countdown").textContent = `dans ${h} h ${pad(m)} min`;
+  const diff = Math.max(0, Math.floor((nextAlarmDate() - now) / 1000));
+  $("countdown").textContent =
+    `${pad(Math.floor(diff / 3600))}:${pad(Math.floor((diff % 3600) / 60))}:${pad(diff % 60)}`;
 
   const hhmm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const firedKey = `${todayKey()} ${settings.time}`;

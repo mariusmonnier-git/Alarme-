@@ -1,0 +1,36 @@
+name: DanseReveil
+options:
+  bundleIdPrefix: com.dansereveil
+  deploymentTarget:
+    iOS: "26.1"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  DanseReveil:
+    type: application
+    platform: iOS
+    sources:
+      - path: DanseReveil
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dansereveil.app
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: DanseReveil/Info.plist
+      properties:
+        CFBundleDisplayName: Danse Réveil
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [audio]
+        NSAlarmKitUsageDescription: "Danse Réveil a besoin de programmer des alarmes pour te réveiller, même téléphone verrouillé."
+        NSCameraUsageDescription: "La caméra vérifie que tu danses vraiment pour arrêter l'alarme. Aucune image n'est enregistrée."
+        NSMotionUsageDescription: "Les capteurs de mouvement mesurent ta danse quand tu tiens le téléphone en main."
+    scheme: {}

@@ -133,7 +133,17 @@ input[type="time"] {
 .now { font-size: 88px; font-weight: 200; margin: 0; font-variant-numeric: tabular-nums; }
 .armed-label { font-size: 20px; color: var(--muted); margin: 8px 0; }
 .armed-label strong { color: var(--accent); }
-.countdown { color: var(--muted); margin: 0; }
+.countdown-label { color: var(--muted); margin: 28px 0 0; }
+.countdown {
+  margin: 4px 0 0;
+  font-size: 56px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
 /* Écran sonnerie */
 #screen-ring { padding: 0; max-width: none; gap: 0; background: #000; }

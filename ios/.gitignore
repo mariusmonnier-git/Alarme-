@@ -1,0 +1,5 @@
+DanseReveil.xcodeproj/
+DanseReveil/Info.plist
+build/
+Payload/
+*.ipa
